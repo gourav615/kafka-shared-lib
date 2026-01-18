@@ -1,25 +1,28 @@
 def call(Map userConfig = [:]) {
 
-    // Load default config from resources
     def defaultConfig = loadConfigFromResources()
-    def config = defaultConfig + userConfig   // user overrides defaults
+    def config = defaultConfig + userConfig
 
     pipeline {
         agent any
 
-        environment {
-            SLACK_CHANNEL = config.SLACK_CHANNEL_NAME
-            ENV           = config.ENVIRONMENT
-            CODE_PATH     = config.CODE_BASE_PATH
-            MESSAGE       = config.ACTION_MESSAGE
-        }
-
         stages {
+
+            stage('Init Config') {
+                steps {
+                    script {
+                        env.SLACK_CHANNEL = config.SLACK_CHANNEL_NAME
+                        env.ENV           = config.ENVIRONMENT
+                        env.CODE_PATH     = config.CODE_BASE_PATH
+                        env.MESSAGE       = config.ACTION_MESSAGE
+                    }
+                }
+            }
 
             stage('Clone') {
                 steps {
-                    echo "Cloning code for ${ENV}"
-                    git branch: 'main', url: 'https://github.com/your-org/kafka-ansible.git'
+                    echo "Cloning code for ${env.ENV}"
+                    git branch: 'main', url: 'https://github.com/gourav615/kafka-ansible-project.git'
                 }
             }
 
@@ -28,15 +31,15 @@ def call(Map userConfig = [:]) {
                     expression { return config.KEEP_APPROVAL_STAGE == true }
                 }
                 steps {
-                    input message: "Approve deployment to ${ENV}?"
+                    input message: "Approve deployment to ${env.ENV}?"
                 }
             }
 
             stage('Playbook Execution') {
                 steps {
-                    echo "Running Ansible from ${CODE_PATH}"
+                    echo "Running Ansible from ${env.CODE_PATH}"
                     sh """
-                      cd ${CODE_PATH}
+                      cd ${env.CODE_PATH}
                       ansible-playbook kafka.yml
                     """
                 }
@@ -46,8 +49,8 @@ def call(Map userConfig = [:]) {
                 steps {
                     echo "Sending Slack Notification"
                     slackSend(
-                        channel: SLACK_CHANNEL,
-                        message: MESSAGE + " for environment: " + ENV
+                        channel: env.SLACK_CHANNEL,
+                        message: "${env.MESSAGE} for environment: ${env.ENV}"
                     )
                 }
             }
@@ -59,4 +62,3 @@ def loadConfigFromResources() {
     def text = libraryResource 'kafkaConfig.groovy'
     return evaluate(text)
 }
-
